@@ -9,7 +9,6 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input, Bidirectional, LSTM, Dropout, Flatten, Dense, ELU
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -61,7 +60,7 @@ def create_model():
         Dropout(0.1),
         Bidirectional(LSTM(N_SAMPLES // 2, return_sequences=True)),
         Dropout(0.1),
-        Bidirectional(LSTM(N_SAMPLES // 4, return_sequences=True)),
+        Bidirectional(LSTM(N_SAMPLES // 4)),
         Dropout(0.1),
         Flatten(),
         Dense(128, activation='elu'),
@@ -75,36 +74,6 @@ def create_model():
     )
 
     return model
-
-def train(X, y):
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp)
-
-    print(f"Treino: {X_train.shape}, Validação: {X_val.shape}, Teste: {X_test.shape}")
-
-    early_stop = EarlyStopping(
-        monitor='val_loss',
-        patience=10,
-        restore_best_weights=True
-    )
-
-    checkpoint = ModelCheckpoint(
-        'melhor_modelo.h5',
-        monitor='val_accuracy',
-        save_best_only=True,
-        mode='max',
-        verbose=1
-    )
-
-    history = model.fit(
-        X_train, y_train,
-        validation_data=(X_val, y_val),
-        epochs=10, 
-        batch_size=256,
-        callbacks=[early_stop, checkpoint],
-        verbose=1
-    )
 
 def validate(model, X_test, y_test):
     y_pred_probs = model.predict(X_test)
@@ -124,33 +93,30 @@ def validate(model, X_test, y_test):
     print("\nRelatório por classe:")
     print(classification_report(y_test, y_pred, digits=4))
 
-def normalize(X_train:np.ndarray, X_val:np.ndarray, X_test:np.ndarray):
+def normalize(X_train: np.ndarray, X_val: np.ndarray, X_test: np.ndarray):
 
+    # Normalização Z-score (por canal)
     mu = X_train.mean(axis=(0, 1), keepdims=True)
     sigma = X_train.std(axis=(0, 1), keepdims=True)
-
-    # Evitar divisão por zero
     sigma[sigma == 0] = 1.0
 
     X_train_z = (X_train - mu) / sigma
     X_val_z   = (X_val - mu) / sigma
     X_test_z  = (X_test - mu) / sigma
 
-    n_train, n_points, n_channels = X_train_z.shape
+    # Inicializa arrays finais
+    X_train_final = np.zeros_like(X_train_z)
+    X_val_final   = np.zeros_like(X_val_z)
+    X_test_final  = np.zeros_like(X_test_z)
 
-    # Achatar apenas amostras e tempo (mantendo canais separados)
-    X_train_2d = X_train_z.reshape(-1, n_channels)
-    X_val_2d   = X_val_z.reshape(-1, n_channels)
-    X_test_2d  = X_test_z.reshape(-1, n_channels)
+    n_channels = X_train.shape[2]
 
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    X_train_scaled = scaler.fit_transform(X_train_2d)
-    X_val_scaled   = scaler.transform(X_val_2d)
-    X_test_scaled  = scaler.transform(X_test_2d)
-
-    X_train_final = X_train_scaled.reshape(n_train, n_points, n_channels)
-    X_val_final   = X_val_scaled.reshape(X_val.shape[0], n_points, n_channels)
-    X_test_final  = X_test_scaled.reshape(X_test.shape[0], n_points, n_channels)
+    # Aplica MinMaxScaler em cada canal separadamente
+    for ch in range(n_channels):
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        X_train_final[:, :, ch] = scaler.fit_transform(X_train_z[:, :, ch])
+        X_val_final[:, :, ch]   = scaler.transform(X_val_z[:, :, ch])
+        X_test_final[:, :, ch]  = scaler.transform(X_test_z[:, :, ch])
 
     return X_train_final, X_val_final, X_test_final
 
