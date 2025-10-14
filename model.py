@@ -60,7 +60,7 @@ def create_model():
         Dropout(0.1),
         Bidirectional(LSTM(N_SAMPLES // 2, return_sequences=True)),
         Dropout(0.1),
-        Bidirectional(LSTM(N_SAMPLES // 4)),
+        Bidirectional(LSTM(N_SAMPLES // 4, return_sequences=True)),
         Dropout(0.1),
         Flatten(),
         Dense(128, activation='elu'),
