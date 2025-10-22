@@ -2,3 +2,6 @@ __pycache__/
 *.ini
 .venv/
 *.keras
+*.qvw
+datalake/
+papers/
